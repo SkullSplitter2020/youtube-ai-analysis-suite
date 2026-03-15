@@ -7,7 +7,7 @@ KI-Zusammenfassung mit Ollama
 import logging
 import asyncio
 import aiohttp
-import json
+import os
 
 log = logging.getLogger("summarizer")
 
@@ -40,7 +40,7 @@ class OllamaSummarizer:
                             "stream": False,
                             "options": {
                                 "temperature": 0.7,
-                                "num_predict": 1000
+                                "num_predict": 500
                             }
                         }
                         

@@ -54,15 +54,13 @@ class WhisperTranscriber:
                 
                 # Segmente sammeln
                 text_parts = []
-                total_segments = 0
                 
                 for i, segment in enumerate(segments):
                     text_parts.append(segment.text)
-                    total_segments = i + 1
                     
                     # Fortschritt callback (alle 10 Segmente)
                     if progress_callback and i % 10 == 0:
-                        progress = min(0.95, (i + 1) / 100)  # Max 95%
+                        progress = min(0.95, (i + 1) / 100)
                         loop.call_soon_threadsafe(
                             lambda p=progress: asyncio.create_task(progress_callback(p))
                         )

@@ -4,7 +4,6 @@ YouTube AI Analysis Suite - Chapter Detector
 Erkennung von Kapiteln basierend auf Pausen und Themen
 """
 
-import json
 import logging
 import re
 
@@ -22,34 +21,19 @@ class ChapterDetector:
             # Einfache Kapitelerkennung basierend auf Text-Struktur
             chapters = []
             
-            # Nach Überschriften suchen (z.B. "Kapitel 1:", "Teil 1:", etc.)
-            lines = transcript.split('\n')
-            current_chapter = {"start": 0, "title": "Einleitung", "text": []}
+            # Text in Absätze aufteilen
+            paragraphs = transcript.split('\n\n')
             
-            for i, line in enumerate(lines):
-                line = line.strip()
-                
-                # Nach Kapitel-Überschriften suchen
-                if re.match(r'^(Kapitel|Teil|Abschnitt|Chapter|Part)\s+\d+[:.]', line, re.IGNORECASE):
-                    # Vorheriges Kapitel speichern
-                    if current_chapter["text"]:
-                        current_chapter["text"] = ' '.join(current_chapter["text"])
-                        chapters.append(current_chapter.copy())
+            for i, para in enumerate(paragraphs):
+                if len(para) > 100:  # Nur längere Absätze als Kapitel
+                    # Ersten Satz als Titel
+                    first_sentence = para.split('.')[0][:50]
                     
-                    # Neues Kapitel beginnen
-                    current_chapter = {
-                        "start": i,
-                        "title": line,
-                        "text": []
-                    }
-                else:
-                    if line:  # Nur nicht-leere Zeilen
-                        current_chapter["text"].append(line)
-            
-            # Letztes Kapitel speichern
-            if current_chapter["text"]:
-                current_chapter["text"] = ' '.join(current_chapter["text"])
-                chapters.append(current_chapter)
+                    chapters.append({
+                        "start": i * 60,  # Ungefähre Zeit in Sekunden
+                        "title": first_sentence,
+                        "text": para[:200] + "..."
+                    })
             
             # Wenn keine Kapitel gefunden, ein Kapitel erstellen
             if len(chapters) <= 1:
@@ -60,7 +44,7 @@ class ChapterDetector:
                 }]
             
             log.info(f"{len(chapters)} Kapitel erkannt")
-            return chapters
+            return chapters[:10]  # Maximal 10 Kapitel
             
         except Exception as e:
             log.error(f"Fehler bei Kapitelerkennung: {e}")

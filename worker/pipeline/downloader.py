@@ -65,7 +65,9 @@ class YouTubeDownloader:
                 info = await self._extract_info_with_retry(ydl, url)
                 
                 # Video downloaden
-                ydl.download([url])
+                await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: ydl.download([url])
+                )
                 
                 # Audio-Datei finden
                 audio_file = None

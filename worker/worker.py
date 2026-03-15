@@ -10,7 +10,6 @@ import json
 import asyncio
 import logging
 import signal
-import time
 from datetime import datetime
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
@@ -48,12 +47,14 @@ except ImportError as e:
 
 # Pipeline-Importe
 try:
-    from pipeline.downloader import YouTubeDownloader, DownloadError, NetworkError
-    from pipeline.audio_processor import AudioProcessor
-    from pipeline.transcriber import WhisperTranscriber
-    from pipeline.chapter_detector import ChapterDetector
-    from pipeline.summarizer import OllamaSummarizer, OllamaTimeoutError
-    from pipeline.podcast_exporter import PodcastExporter
+    from pipeline import (
+        YouTubeDownloader, DownloadError, NetworkError,
+        AudioProcessor,
+        WhisperTranscriber,
+        ChapterDetector,
+        OllamaSummarizer, OllamaTimeoutError,
+        PodcastExporter
+    )
     log.info("Pipeline-Module erfolgreich geladen")
 except ImportError as e:
     log.error(f"Kritischer Fehler: Pipeline-Module nicht gefunden: {e}")
@@ -140,60 +141,41 @@ class YouTubeWorker:
             except Exception as e:
                 log.error(f"Fehler beim Starten der Health-Checks: {e}")
     
-    async def get_next_job(self) -> Optional[Dict[str, Any]]:
-        """Holt nächsten Job aus der Redis Queue"""
-        try:
-            r = await redis.from_url(REDIS_URL)
-            
-            # Prioritäts-Queue zuerst prüfen
-            for queue in ["yt_jobs_prioritaet", "yt_jobs_normal"]:
-                job_data = await r.lpop(queue)
-                if job_data:
-                    job = json.loads(job_data)
-                    
-                    # Job in Redis als "in Bearbeitung" markieren
-                    await r.setex(f"job:{job['id']}:processing", 300, self.worker_id)
-                    
-                    log.info(f"Job {job['id']} aus Queue '{queue}' übernommen")
-                    await r.close()
-                    return job
-                    
-            await r.close()
-            return None
-            
-        except Exception as e:
-            log.error(f"Fehler beim Holen des nächsten Jobs: {e}")
-            return None
-    
-    async def update_progress(self, job_id: str, progress: float, status: str):
-        """Aktualisiert Job-Fortschritt"""
-        try:
-            # In Datenbank speichern
-            await job_fortschritt_update(job_id, progress, status)
-            
-            # In Redis für Echtzeit-Updates
-            r = await redis.from_url(REDIS_URL)
-            await r.setex(
-                f"fortschritt:{job_id}",
-                3600,
-                json.dumps({"fortschritt": progress, "status": status})
-            )
-            await r.close()
-            
-            # Health-Check aktuellen Job setzen
-            if self.health_check:
-                self.health_check.current_job = job_id
-                self.health_check.last_heartbeat = datetime.now()
+async def get_next_job(self) -> Optional[Dict[str, Any]]:
+    """Holt nächsten Job aus der Redis Queue"""
+    try:
+        r = await redis.from_url(REDIS_URL)
+        
+        # Prioritäts-Queue zuerst prüfen
+        for queue in ["yt_jobs_prioritaet", "yt_jobs_normal"]:
+            job_data = await r.lpop(queue)
+            if job_data:
+                job = json.loads(job_data)
                 
-        except Exception as e:
-            log.error(f"Fehler beim Fortschritts-Update für Job {job_id}: {e}")
-    
+                # Prüfen ob 'id' vorhanden ist
+                if 'id' not in job:
+                    log.error(f"Job in Queue hat keine ID: {job}")
+                    continue
+                
+                # Job in Redis als "in Bearbeitung" markieren
+                await r.setex(f"job:{job['id']}:processing", 300, self.worker_id)
+                
+                log.info(f"Job {job['id']} aus Queue '{queue}' übernommen")
+                await r.aclose()
+                return job
+                
+        await r.aclose()
+        return None
+        
+    except Exception as e:
+        log.error(f"Fehler beim Holen des nächsten Jobs: {e}")
+        return None    
     async def check_abort(self, job_id: str) -> bool:
         """Prüft ob Job abgebrochen werden soll"""
         try:
             r = await redis.from_url(REDIS_URL)
             aborted = await r.exists(f"abbruch:{job_id}")
-            await r.close()
+            await r.aclose()
             
             if aborted:
                 log.info(f"Job {job_id} wurde abgebrochen")
@@ -227,26 +209,32 @@ class YouTubeWorker:
             
             # 2. Audio verarbeiten (20%)
             await self.update_progress(job_id, 20.0, "verarbeitung")
-            audio_file = f"{AUDIO_PATH}/{job_id}/audio.wav"
-            processed_audio = await self.audio_processor.process(
-                audio_file,
-                job_id
-            )
+            audio_file = video_info.get('audio_pfad')
+            if audio_file:
+                processed_audio = await self.audio_processor.process(
+                    audio_file,
+                    job_id
+                )
+            else:
+                processed_audio = None
             
             if await self.check_abort(job_id):
                 return
             
             # 3. Transkription (35-70%)
             await self.update_progress(job_id, 35.0, "transkription")
-            transcript = await self.transcriber.transcribe(
-                audio_file=processed_audio,
-                job_id=job_id,
-                progress_callback=lambda p: self.update_progress(
-                    job_id, 
-                    35.0 + (p * 0.35),  # 35% bis 70%
-                    "transkription"
+            if processed_audio:
+                transcript = await self.transcriber.transcribe(
+                    audio_file=processed_audio,
+                    job_id=job_id,
+                    progress_callback=lambda p: self.update_progress(
+                        job_id, 
+                        35.0 + (p * 0.35),
+                        "transkription"
+                    )
                 )
-            )
+            else:
+                transcript = "Kein Audio verfügbar"
             
             if await self.check_abort(job_id):
                 return
@@ -279,7 +267,7 @@ class YouTubeWorker:
             
             # 6. Podcast exportieren (95%) - optional
             podcast_file = None
-            if options.get('export_podcast', False):
+            if options.get('export_podcast', False) and processed_audio:
                 await self.update_progress(job_id, 95.0, "verarbeitung")
                 podcast_file = await self.podcast_exporter.export(
                     audio_file=processed_audio,
@@ -365,22 +353,22 @@ class YouTubeWorker:
             # Job als abgebrochen markieren
             await job_status_update(self.current_job, "abgebrochen")
 
-async def main():
-    """Hauptfunktion"""
-    # Worker-ID erstellen
-    worker_id = os.getenv("WORKER_ID", f"worker-{os.getpid()}")
-    
-    # Worker erstellen und starten
-    worker = YouTubeWorker(worker_id)
-    
-    try:
-        await worker.run()
-    except KeyboardInterrupt:
-        log.info("KeyboardInterrupt empfangen")
-        await worker.shutdown()
-    except Exception as e:
-        log.error(f"Kritischer Fehler: {e}")
-        sys.exit(1)
+    async def main():
+        """Hauptfunktion"""
+        # Worker-ID erstellen
+        worker_id = os.getenv("WORKER_ID", f"worker-{os.getpid()}")
+        
+        # Worker erstellen und starten
+        worker = YouTubeWorker(worker_id)
+        
+        try:
+            await worker.run()
+        except KeyboardInterrupt:
+            log.info("KeyboardInterrupt empfangen")
+            await worker.shutdown()
+        except Exception as e:
+            log.error(f"Kritischer Fehler: {e}")
+            sys.exit(1)
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    if __name__ == "__main__":
+        asyncio.run(main())
