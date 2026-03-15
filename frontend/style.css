@@ -1,0 +1,290 @@
+:root{--bg:#0f1117;--karte:#1a1d27;--rand:#2e3148;--akz:#6366f1;--akzh:#818cf8;--text:#e2e8f0;--ged:#94a3b8;--ok:#22c55e;--warn:#f59e0b;--err:#ef4444;--blau:#3b82f6}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Inter",system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:1rem 2rem;background:var(--karte);border-bottom:1px solid var(--rand);position:sticky;top:0;z-index:100}
+.logo{font-size:1.3rem;font-weight:700;color:var(--akz)}
+nav{display:flex;gap:.5rem}
+.nav-btn{background:none;border:1px solid var(--rand);color:var(--ged);padding:.45rem 1.1rem;border-radius:8px;cursor:pointer;font-size:.875rem;font-weight:500;transition:all .2s}
+.nav-btn.aktiv,.nav-btn:hover{background:var(--akz);color:#fff;border-color:var(--akz)}
+main{max-width:1100px;margin:2rem auto;padding:0 1.5rem}
+.karte{background:var(--karte);border:1px solid var(--rand);border-radius:14px;padding:1.5rem;margin-bottom:1.5rem}
+h2{font-size:1.05rem;font-weight:600;margin-bottom:1.2rem}
+.url-feld{width:100%;background:var(--bg);border:1px solid var(--rand);color:var(--text);padding:.75rem 1rem;border-radius:10px;font-size:.95rem;margin-bottom:1rem}
+.url-feld:focus{outline:none;border-color:var(--akz)}
+.einstellungen{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem}
+.gruppe{display:flex;flex-direction:column;gap:.4rem}
+.gruppe>label{font-size:.75rem;color:var(--ged);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+select{background:var(--bg);border:1px solid var(--rand);color:var(--text);padding:.6rem .9rem;border-radius:8px;font-size:.88rem;cursor:pointer}
+select:focus{outline:none;border-color:var(--akz)}
+.schalter{display:flex;flex-direction:column;gap:.45rem}
+.schalter label{display:flex;align-items:center;gap:.5rem;font-size:.85rem;color:var(--text);cursor:pointer}
+.schalter input[type="checkbox"]{accent-color:var(--akz);width:15px;height:15px}
+button{background:var(--akz);color:#fff;border:none;padding:.6rem 1.4rem;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:600;transition:background .2s,transform .1s}
+button:hover{background:var(--akzh)}
+button:active{transform:scale(.98)}
+#start-btn{width:100%;padding:.85rem;font-size:1rem;border-radius:10px}
+.stats-leiste{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.5rem}
+.stat{background:var(--karte);border:1px solid var(--rand);border-radius:10px;padding:.9rem 1rem;text-align:center;font-size:.82rem;color:var(--ged);font-weight:500}
+.job-karte{background:var(--karte);border:1px solid var(--rand);border-radius:12px;padding:1rem 1.25rem;margin-bottom:.75rem;cursor:pointer;transition:border-color .2s,transform .15s}
+.job-karte:hover{border-color:var(--akz);transform:translateY(-1px)}
+.job-kopf{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:.5rem;gap:1rem}
+.job-titel{font-weight:600;font-size:.9rem;line-height:1.4}
+.job-meta{font-size:.75rem;color:var(--ged);margin-top:.15rem}
+.badge{padding:.2rem .65rem;border-radius:20px;font-size:.72rem;font-weight:600;white-space:nowrap}
+.b-warteschlange{background:rgba(148,163,184,.15);color:var(--ged)}
+.b-herunterladen{background:rgba(59,130,246,.15);color:#60a5fa}
+.b-verarbeitung{background:rgba(245,158,11,.15);color:var(--warn)}
+.b-transkription{background:rgba(99,102,241,.15);color:var(--akzh)}
+.b-zusammenfassung{background:rgba(168,85,247,.15);color:#c084fc}
+.b-abgeschlossen{background:rgba(34,197,94,.15);color:var(--ok)}
+.b-fehler{background:rgba(239,68,68,.15);color:var(--err)}
+.fortschritt{height:4px;background:var(--rand);border-radius:2px;overflow:hidden;margin-top:.6rem}
+.fortschritt-bar{height:100%;background:linear-gradient(90deg,var(--akz),var(--akzh));border-radius:2px;transition:width .6s ease}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:1000;padding:1rem;backdrop-filter:blur(4px)}
+.modal-box{background:var(--karte);border:1px solid var(--rand);border-radius:16px;padding:2rem;max-width:900px;width:100%;max-height:88vh;overflow-y:auto;position:relative}
+.modal-x{position:absolute;top:1rem;right:1rem;background:var(--rand);color:var(--text);border-radius:50%;width:32px;height:32px;padding:0;font-size:.9rem;display:flex;align-items:center;justify-content:center}
+.mtabs{display:flex;gap:.25rem;border-bottom:1px solid var(--rand);margin-bottom:1.5rem}
+.mtab{background:none;border:none;border-bottom:2px solid transparent;color:var(--ged);padding:.5rem 1.1rem;border-radius:0;font-size:.88rem;font-weight:500}
+.mtab.aktiv{color:var(--akz);border-bottom-color:var(--akz)}
+.inhalt{background:var(--bg);border:1px solid var(--rand);border-radius:10px;padding:1.25rem;font-size:.85rem;line-height:1.8;white-space:pre-wrap;max-height:420px;overflow-y:auto}
+.kap-liste{list-style:none}
+.kap-liste li{display:flex;align-items:center;gap:1rem;padding:.6rem 0;border-bottom:1px solid var(--rand);font-size:.88rem}
+.kap-ts{color:var(--akz);font-family:"Courier New",monospace;font-size:.82rem;min-width:65px;font-weight:600}
+.export-zeile{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rand)}
+.exp-btn{font-size:.8rem;padding:.4rem .9rem;background:var(--bg);border:1px solid var(--rand);color:var(--ged);border-radius:6px}
+.exp-btn:hover{border-color:var(--akz);color:var(--akz);background:var(--bg)}
+.suche-zeile{display:flex;gap:.75rem;margin-bottom:1.5rem}
+.suche-zeile input{flex:1;background:var(--bg);border:1px solid var(--rand);color:var(--text);padding:.65rem 1rem;border-radius:8px;font-size:.9rem}
+.suche-zeile input:focus{outline:none;border-color:var(--akz)}
+.s-result{background:var(--bg);border:1px solid var(--rand);border-radius:10px;padding:1rem 1.25rem;margin-bottom:.75rem;cursor:pointer;transition:border-color .2s}
+.s-result:hover{border-color:var(--akz)}
+.s-result h4{margin-bottom:.3rem;font-size:.9rem}
+.s-snip{font-size:.82rem;color:var(--ged);line-height:1.6}
+.s-meta{font-size:.75rem;color:var(--akz);margin-top:.4rem}
+.leer{text-align:center;padding:3rem 1rem;color:var(--ged);font-size:.9rem}
+@media(max-width:768px){.einstellungen{grid-template-columns:1fr}.stats-leiste{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.stats-leiste{grid-template-columns:1fr}.modal-box{padding:1.25rem}}
+
+/* ── Job-Karten mit Thumbnail ──────────────────────────── */
+.job-karte { padding: 0; overflow: hidden; }
+
+.job-karte-inner {
+    display: flex;
+    gap: 0;
+    align-items: stretch;
+}
+
+.thumb {
+    width: 140px;
+    min-width: 140px;
+    height: 90px;
+    background: var(--rand);
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 12px 0 0 12px;
+    transition: opacity 0.3s;
+}
+
+.thumb.geladen { opacity: 1; }
+.thumb-placeholder { font-size: 2rem; opacity: 0.3; }
+
+.job-info {
+    padding: 0.85rem 1.1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.job-titel {
+    font-weight: 600;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.job-kanal {
+    font-size: 0.78rem;
+    color: var(--ged);
+}
+
+.job-meta {
+    font-size: 0.72rem;
+    color: var(--ged);
+    opacity: 0.7;
+}
+
+.job-unten {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.3rem;
+}
+
+.fortschritt-text {
+    font-size: 0.72rem;
+    color: var(--ged);
+}
+
+@media(max-width: 480px) {
+    .thumb { width: 100px; min-width: 100px; height: 70px; }
+}
+
+/* ── WebSocket Status ──────────────────────────────────── */
+.ws-anzeige {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--ged);
+}
+
+.ws-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ged);
+    display: inline-block;
+    transition: background 0.3s;
+}
+
+.ws-dot.verbunden {
+    background: var(--ok);
+    box-shadow: 0 0 6px var(--ok);
+    animation: puls 2s infinite;
+}
+
+.ws-dot.getrennt {
+    background: var(--err);
+}
+
+@keyframes puls {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+}
+
+/* ── KI-Chat ─────────────────────────────────────────────── */
+.chat-box {
+    height: 320px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--rand);
+    border-radius: 10px 10px 0 0;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.chat-msg {
+    max-width: 80%;
+    padding: 0.6rem 0.9rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.chat-nutzer {
+    background: var(--akz);
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 3px;
+}
+
+.chat-assistent {
+    background: var(--rand);
+    color: var(--text);
+    align-self: flex-start;
+    border-bottom-left-radius: 3px;
+}
+
+.chat-fehler {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--err);
+    align-self: center;
+    font-size: 0.8rem;
+}
+
+.chat-eingabe {
+    display: flex;
+    gap: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--rand);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 0.6rem;
+}
+
+.chat-eingabe input {
+    flex: 1;
+    background: var(--karte);
+    border: 1px solid var(--rand);
+    color: var(--text);
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.88rem;
+}
+
+.chat-eingabe input:focus {
+    outline: none;
+    border-color: var(--akz);
+}
+
+.chat-eingabe button:first-of-type {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+}
+
+/* ── Abbruch-Button ─────────────────────────────────────── */
+.job-aktionen {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.abbruch-btn {
+    background: transparent;
+    border: 1px solid var(--err);
+    color: var(--err);
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1;
+}
+
+.abbruch-btn:hover {
+    background: var(--err);
+    color: white;
+}
+
+.abbruch-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Abgebrochen-Status Badge */
+.b-abgebrochen {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* Abgebrochene Jobs ausgrauen */
+.job-karte:has(.b-abgebrochen) {
+    opacity: 0.6;
+}
+
+.job-karte:has(.b-abgebrochen) .fortschritt-bar {
+    background: var(--err);
+}
