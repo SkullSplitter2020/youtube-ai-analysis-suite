@@ -86,6 +86,8 @@ services:
     image: ollama/ollama:latest
     ports:
       - "11434:11434"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
     volumes:
       - ollama_daten:/root/.ollama
     restart: unless-stopped
