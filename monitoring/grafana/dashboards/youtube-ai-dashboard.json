@@ -1,0 +1,72 @@
+{
+  "dashboard": {
+    "title": "YouTube AI Analysis Suite",
+    "panels": [
+      {
+        "title": "Aktive Jobs",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(youtube_ai_active_jobs)",
+            "legendFormat": "Aktive Jobs"
+          }
+        ]
+      },
+      {
+        "title": "Job-Dauer",
+        "type": "histogram",
+        "targets": [
+          {
+            "expr": "youtube_ai_job_duration_seconds_bucket",
+            "format": "heatmap"
+          }
+        ]
+      },
+      {
+        "title": "Queue-Größe",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "youtube_ai_queue_size",
+            "legendFormat": "{{priority}}"
+          }
+        ]
+      },
+      {
+        "title": "Worker Health",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "youtube_ai_worker_health",
+            "format": "table",
+            "instant": true
+          }
+        ]
+      },
+      {
+        "title": "API Requests",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(youtube_ai_api_requests_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ]
+      },
+      {
+        "title": "System Resources",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "youtube_ai_system_cpu_percent",
+            "legendFormat": "CPU"
+          },
+          {
+            "expr": "youtube_ai_system_memory_bytes{type='used'} / youtube_ai_system_memory_bytes{type='total'} * 100",
+            "legendFormat": "Memory"
+          }
+        ]
+      }
+    ]
+  }
+}

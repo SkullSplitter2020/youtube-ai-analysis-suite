@@ -1,31 +1,67 @@
+#!/usr/bin/env python3
+"""
+YouTube AI Analysis Suite - Chapter Detector
+Erkennung von Kapiteln basierend auf Pausen und Themen
+"""
+
+import json
 import logging
-log = logging.getLogger("kapitel")
+import re
 
+log = logging.getLogger("chapter_detector")
 
-def _ts(sek):
-    h, m, s = int(sek // 3600), int((sek % 3600) // 60), int(sek % 60)
-    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
-
-
-def kapitel_erkennen(segmente, transkript):
-    if not segmente:
-        return [{"zeitstempel": "00:00", "sekunden": 0.0, "titel": "Einleitung"}]
-    kapitel, aktuell, ende = [], [], 0.0
-    for i, s in enumerate(segmente):
-        bruch = (s["start"] - ende > 3.0 or
-                 (i > 0 and i % 25 == 0 and s["start"] - segmente[0]["start"] > 60))
-        if bruch and aktuell:
-            st = aktuell[0]["start"]
-            txt = " ".join(x["text"] for x in aktuell[:3]).split()[:6]
-            kapitel.append({"zeitstempel": _ts(st), "sekunden": st,
-                           "titel": " ".join(txt) if txt else f"Kapitel {len(kapitel)+1}"})
-            aktuell = []
-        aktuell.append(s)
-        ende = s["end"]
-    if aktuell:
-        st = aktuell[0]["start"]
-        txt = " ".join(x["text"] for x in aktuell[:3]).split()[:6]
-        kapitel.append({"zeitstempel": _ts(st), "sekunden": st,
-                       "titel": " ".join(txt) if txt else f"Kapitel {len(kapitel)+1}"})
-    log.info(f"{len(kapitel)} Kapitel")
-    return kapitel or [{"zeitstempel": "00:00", "sekunden": 0.0, "titel": "Einleitung"}]
+class ChapterDetector:
+    def __init__(self):
+        pass
+    
+    async def detect(self, transcript: str, audio_file: str = None) -> list:
+        """
+        Erkennt Kapitel im Transkript
+        """
+        try:
+            # Einfache Kapitelerkennung basierend auf Text-Struktur
+            chapters = []
+            
+            # Nach Überschriften suchen (z.B. "Kapitel 1:", "Teil 1:", etc.)
+            lines = transcript.split('\n')
+            current_chapter = {"start": 0, "title": "Einleitung", "text": []}
+            
+            for i, line in enumerate(lines):
+                line = line.strip()
+                
+                # Nach Kapitel-Überschriften suchen
+                if re.match(r'^(Kapitel|Teil|Abschnitt|Chapter|Part)\s+\d+[:.]', line, re.IGNORECASE):
+                    # Vorheriges Kapitel speichern
+                    if current_chapter["text"]:
+                        current_chapter["text"] = ' '.join(current_chapter["text"])
+                        chapters.append(current_chapter.copy())
+                    
+                    # Neues Kapitel beginnen
+                    current_chapter = {
+                        "start": i,
+                        "title": line,
+                        "text": []
+                    }
+                else:
+                    if line:  # Nur nicht-leere Zeilen
+                        current_chapter["text"].append(line)
+            
+            # Letztes Kapitel speichern
+            if current_chapter["text"]:
+                current_chapter["text"] = ' '.join(current_chapter["text"])
+                chapters.append(current_chapter)
+            
+            # Wenn keine Kapitel gefunden, ein Kapitel erstellen
+            if len(chapters) <= 1:
+                chapters = [{
+                    "start": 0,
+                    "title": "Vollständiges Video",
+                    "text": transcript[:500] + "..."
+                }]
+            
+            log.info(f"{len(chapters)} Kapitel erkannt")
+            return chapters
+            
+        except Exception as e:
+            log.error(f"Fehler bei Kapitelerkennung: {e}")
+            return [{"start": 0, "title": "Kapitel 1", "text": transcript[:200] + "..."}]

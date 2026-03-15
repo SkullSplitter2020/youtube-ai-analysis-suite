@@ -1,55 +1,86 @@
+#!/usr/bin/env python3
+"""
+YouTube AI Analysis Suite - Transcriber
+Transkription mit Faster-Whisper
+"""
+
+import os
+import logging
 from faster_whisper import WhisperModel
-import os, logging
-from typing import Optional, Callable
 
 log = logging.getLogger("transcriber")
-_cache = {}
 
-
-def _modell(groesse):
-    g = os.getenv("WHISPER_GERAET", "cpu")
-    b = os.getenv("WHISPER_BERECHNUNG", "int8")
-    k = f"{groesse}_{g}_{b}"
-    if k not in _cache:
-        log.info(f"Lade Whisper {groesse} ({g}/{b})")
-        _cache[k] = WhisperModel(groesse, device=g, compute_type=b)
-    return _cache[k]
-
-
-def audio_transkribieren(
-    pfad: str,
-    modell: str = "base",
-    sprache: Optional[str] = None,
-    abbruch_callback: Optional[Callable] = None  # ← NEU
-):
-    w = _modell(modell)
-    segs_iter, info = w.transcribe(
-        pfad,
-        language=sprache,
-        beam_size=5,
-        vad_filter=True,
-        vad_parameters=dict(min_silence_duration_ms=500),
-        word_timestamps=True
-    )
-    log.info(f"Sprache: {info.language} ({info.language_probability:.0%})")
-
-    segmente, teile = [], []
-    for i, s in enumerate(segs_iter):
-
-        # Alle 10 Segmente auf Abbruch prüfen
-        if abbruch_callback and i % 10 == 0 and abbruch_callback():
-            log.info(f"Transkription nach {i} Segmenten abgebrochen")
-            # Teilergebnis zurückgeben
-            text = " ".join(teile)
-            return text, segmente
-
-        segmente.append({
-            "start": round(s.start, 2),
-            "end":   round(s.end, 2),
-            "text":  s.text.strip()
-        })
-        teile.append(s.text.strip())
-
-    text = " ".join(teile)
-    log.info(f"{len(segmente)} Segmente, {len(text)} Zeichen")
-    return text, segmente
+class WhisperTranscriber:
+    def __init__(self, model_size="base", device="cpu", compute_type="int8"):
+        self.model_size = model_size
+        self.device = device
+        self.compute_type = compute_type
+        self.model = None
+        
+    def _load_model(self):
+        """Lädt das Whisper-Modell"""
+        if not self.model:
+            log.info(f"Lade Whisper-Modell: {self.model_size} ({self.device}, {self.compute_type})")
+            self.model = WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=self.compute_type
+            )
+        return self.model
+    
+    async def transcribe(self, audio_file: str, job_id: str, progress_callback=None):
+        """
+        Transkribiert Audio-Datei
+        """
+        try:
+            model = self._load_model()
+            
+            # Transkription in Threadpool ausführen
+            loop = asyncio.get_event_loop()
+            
+            def _transcribe():
+                segments, info = model.transcribe(
+                    audio_file,
+                    beam_size=5,
+                    language="de",
+                    task="transcribe",
+                    vad_filter=True,
+                    vad_parameters=dict(
+                        threshold=0.5,
+                        min_speech_duration_ms=250,
+                        min_silence_duration_ms=2000
+                    )
+                )
+                
+                # Segmente sammeln
+                text_parts = []
+                total_segments = 0
+                
+                for i, segment in enumerate(segments):
+                    text_parts.append(segment.text)
+                    total_segments = i + 1
+                    
+                    # Fortschritt callback (alle 10 Segmente)
+                    if progress_callback and i % 10 == 0:
+                        progress = min(0.95, (i + 1) / 100)  # Max 95%
+                        loop.call_soon_threadsafe(
+                            lambda p=progress: asyncio.create_task(progress_callback(p))
+                        )
+                
+                return ' '.join(text_parts)
+            
+            transcript = await loop.run_in_executor(None, _transcribe)
+            
+            # Transkript speichern
+            transcript_file = f"/app/data/transcripts/{job_id}.txt"
+            os.makedirs(os.path.dirname(transcript_file), exist_ok=True)
+            
+            with open(transcript_file, 'w', encoding='utf-8') as f:
+                f.write(transcript)
+            
+            log.info(f"Transkription abgeschlossen für Job {job_id}")
+            return transcript
+            
+        except Exception as e:
+            log.error(f"Fehler bei Transkription: {e}")
+            raise
