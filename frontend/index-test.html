@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube AI Analysis Suite</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #1a1a1a; color: #e0e0e0; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { color: #667eea; }
+        .status { padding: 20px; background: #2d2d2d; border-radius: 8px; margin: 20px 0; }
+        .success { color: #10b981; }
+        .info { color: #667eea; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 YouTube AI Analysis Suite</h1>
+        <div class="status">
+            <h2>✅ Frontend läuft!</h2>
+            <p class="success">Der Frontend-Server ist erfolgreich gestartet.</p>
+            <p class="info">API unter: http://192.168.178.40:8000</p>
+            <p>Warte auf API-Verbindung...</p>
+        </div>
+    </div>
+    <script>
+        // API-Status prüfen
+        fetch('http://192.168.178.40:8000/api/gesundheit')
+            .then(r => r.json())
+            .then(data => {
+                document.querySelector('.status').innerHTML += 
+                    '<p class="success">✅ API verbunden: ' + data.dienst + '</p>';
+            })
+            .catch(e => {
+                document.querySelector('.status').innerHTML += 
+                    '<p style="color: #ef4444;">❌ API nicht erreichbar</p>';
+            });
+    </script>
+</body>
+</html>

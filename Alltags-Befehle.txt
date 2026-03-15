@@ -1,0 +1,30 @@
+# 1. Alte Container löschen
+docker compose down -v
+docker rm -f $(docker ps -aq) 2>/dev/null
+
+# 2. Alles neu bauen
+docker compose build --no-cache
+
+# 3. Starten
+docker compose up -d
+
+# 4. Status prüfen
+docker compose ps
+
+# 5. Logs ansehen
+docker compose logs -f
+
+# Worker neustarten (falls nötig)
+docker compose restart worker
+
+# Alle Logs ansehen
+docker compose logs -f
+
+# Nur Worker-Logs
+docker compose logs -f worker
+
+# Container-Status
+docker compose ps
+
+# Ressourcen-Nutzung
+docker stats

@@ -1,521 +1,312 @@
-"use strict";
+// YouTube AI Analysis Suite - Frontend
+// Mit Abbrechen, Löschen und KI-Chat Funktionen
 
-// ── Konfiguration ─────────────────────────────────────────
-const API = (() => {
-    const h = window.location.hostname;
-    if (h === "localhost" || h === "127.0.0.1") {
-        return "http://localhost:8000/api";
-    }
-    return `http://${h}:8000/api`;
-})();
+const API_BASE_URL = 'http://192.168.178.40:8000/api';
+let currentJobId = null;
 
-let jobs        = [];
-let aktiverJobId = null;
-
-const ST = {
-    "warteschlange":   "⏳ Warteschlange",
-    "herunterladen":   "⬇ Download",
-    "verarbeitung":    "🔧 Verarbeitung",
-    "transkription":   "📝 Transkription",
-    "zusammenfassung": "✨ Zusammenfassung",
-    "abgeschlossen":   "✅ Fertig",
-    "fehler":          "❌ Fehler",
-    "abgebrochen":     "🛑 Abgebrochen",
-};
-
-const ABBRECHBAR = new Set([
-    "warteschlange", "herunterladen",
-    "verarbeitung", "transkription", "zusammenfassung"
-]);
-
-const LOESCHBAR = new Set([
-    "abgeschlossen", "fehler", "abgebrochen"
-]);
-
-// ── Tab-Navigation ────────────────────────────────────────
-function tab(n) {
-    document.getElementById("tab-dashboard").style.display =
-        n === "dashboard" ? "" : "none";
-    document.getElementById("tab-suche").style.display =
-        n === "suche" ? "" : "none";
-    document.querySelectorAll(".nav-btn")
-        .forEach(b => b.classList.remove("aktiv"));
-    const navEl = document.getElementById("nav-" + n);
-    if (navEl) navEl.classList.add("aktiv");
-}
-
-// ── Job starten ───────────────────────────────────────────
-async function starten() {
-    const urlEl = document.getElementById("url");
-    if (!urlEl) return;
-    const u = urlEl.value.trim();
-    if (!u) { alert("Bitte YouTube-URL eingeben."); return; }
-
-    const btn = document.getElementById("start-btn");
-    if (btn) { btn.textContent = "⏳ Wird gesendet..."; btn.disabled = true; }
-
+// API-Status prüfen
+async function checkApiStatus() {
     try {
-        const r = await fetch(API + "/jobs/", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                url:                       u,
-                whisper_modell:            document.getElementById("modell")?.value || "base",
-                zusammenfassung_stil:      document.getElementById("stil")?.value   || "stichpunkte",
-                kapitel_erkennen:          document.getElementById("kap")?.checked  ?? true,
-                zusammenfassung_erstellen: document.getElementById("zf")?.checked   ?? true,
-                podcast_erstellen:         document.getElementById("pod")?.checked  ?? false,
-            })
-        });
-        if (!r.ok) throw new Error(await r.text());
-        urlEl.value = "";
-        await laden();
-    } catch(e) {
-        alert("Fehler beim Starten: " + e.message);
-    } finally {
-        if (btn) { btn.textContent = "🚀 Analyse starten"; btn.disabled = false; }
+        const response = await fetch(`${API_BASE_URL}/gesundheit`);
+        const data = await response.json();
+        document.getElementById('api-status').textContent = `✅ API verbunden: ${data.dienst}`;
+        document.getElementById('api-status').style.color = '#10b981';
+    } catch (error) {
+        document.getElementById('api-status').textContent = '❌ API nicht erreichbar';
+        document.getElementById('api-status').style.color = '#ef4444';
     }
 }
 
-// ── Jobs laden ────────────────────────────────────────────
-async function laden() {
+// Jobs laden
+async function loadJobs() {
     try {
-        const r = await fetch(API + "/jobs/?limit=50");
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        jobs = await r.json();
-        rendern();
-        stats();
-    } catch(e) {
-        console.error("Laden fehlgeschlagen:", e);
-        const c = document.getElementById("jobs");
-        if (c) c.innerHTML = `
-            <div class="leer" style="color:var(--err)">
-                ⚠️ API nicht erreichbar: ${esc(e.message)}<br>
-                <small style="opacity:.6">${API}/jobs/</small>
-            </div>`;
+        const response = await fetch(`${API_BASE_URL}/jobs/?limit=50`);
+        const jobs = await response.json();
+        displayJobs(jobs);
+        updateStats(jobs);
+    } catch (error) {
+        document.getElementById('jobs-container').innerHTML = 
+            '<div class="error">Fehler beim Laden der Jobs</div>';
     }
 }
 
-// ── Jobs rendern ──────────────────────────────────────────
-function rendern() {
-    const c = document.getElementById("jobs");
-    if (!c) return;
-
-    if (!jobs.length) {
-        c.innerHTML = '<div class="leer">📭 Noch keine Jobs vorhanden.</div>';
+// Jobs anzeigen
+function displayJobs(jobs) {
+    const container = document.getElementById('jobs-container');
+    
+    if (!jobs || jobs.length === 0) {
+        container.innerHTML = '<div class="no-jobs">Keine Jobs vorhanden</div>';
         return;
     }
-
-    c.innerHTML = jobs.map(j => {
-        const kannAbbrechen = ABBRECHBAR.has(j.status);
-        const kannLoeschen  = LOESCHBAR.has(j.status);
-
-        return `
-        <div class="job-karte" onclick="detail('${j.id}')">
-            <div class="job-kopf">
-                <div style="min-width:0;flex:1">
-                    <div class="job-titel">${esc(kurz(j.url, 65))}</div>
-                    <div class="job-meta">
-                        ${zeit(j.erstellt_am)}
-                        &nbsp;·&nbsp;
-                        ${Math.round(j.fortschritt || 0)}%
-                    </div>
+    
+    let html = '<div class="jobs-grid">';
+    jobs.forEach(job => {
+        const progress = job.fortschritt || 0;
+        const statusClass = `status-${job.status}`;
+        
+        html += `
+            <div class="job-card" data-job-id="${job.id}">
+                <div class="job-header">
+                    <span class="job-id" title="${job.id}">${job.id.substring(0,8)}...</span>
+                    <span class="job-status ${statusClass}">${job.status}</span>
                 </div>
-                <div style="display:flex;align-items:center;gap:.4rem;flex-shrink:0">
-                    <span class="badge b-${j.status}">
-                        ${ST[j.status] || j.status}
-                    </span>
-                    ${kannAbbrechen ? `
-                    <button class="abbruch-btn"
-                        onclick="event.stopPropagation();jobAbbrechen('${j.id}',this)"
-                        title="Job abbrechen">🛑
-                    </button>` : ""}
-                    ${kannLoeschen ? `
-                    <button class="abbruch-btn"
-                        onclick="event.stopPropagation();jobLoeschen('${j.id}',this)"
-                        title="Job löschen">🗑️
-                    </button>` : ""}
+                <div class="job-url" title="${job.url}">${job.url.substring(0,50)}${job.url.length > 50 ? '...' : ''}</div>
+                <div class="job-progress">
+                    <div class="progress-bar" style="width: ${progress}%"></div>
+                    <span class="progress-text">${progress}%</span>
+                </div>
+                <div class="job-actions">
+                    ${job.status === 'warteschlange' || job.status === 'herunterladen' || job.status === 'verarbeitung' || job.status === 'transkription' || job.status === 'zusammenfassung' ? 
+                        `<button class="cancel-btn" onclick="cancelJob('${job.id}')">⏹️ Abbrechen</button>` : ''}
+                    <button class="delete-btn" onclick="deleteJob('${job.id}')">🗑️ Löschen</button>
+                    ${job.status === 'abgeschlossen' ? 
+                        `<button class="chat-btn" onclick="openChat('${job.id}')">💬 KI-Chat</button>` : ''}
+                    ${job.status === 'abgeschlossen' ? 
+                        `<button class="details-btn" onclick="viewDetails('${job.id}')">📄 Details</button>` : ''}
                 </div>
             </div>
-            <div class="fortschritt">
-                <div class="fortschritt-bar"
-                     style="width:${j.fortschritt || 0}%">
-                </div>
-            </div>
-        </div>`;
-    }).join("");
-}
-
-// ── Statistiken ───────────────────────────────────────────
-function stats() {
-    let q = 0, w = 0, d = 0, e = 0;
-    jobs.forEach(j => {
-        if (j.status === "warteschlange")          q++;
-        else if (ABBRECHBAR.has(j.status))         w++;
-        else if (j.status === "abgeschlossen")     d++;
-        else if (LOESCHBAR.has(j.status) &&
-                 j.status !== "abgeschlossen")     e++;
+        `;
     });
-    const sq = document.getElementById("s-queue");
-    const sw = document.getElementById("s-work");
-    const sd = document.getElementById("s-done");
-    const se = document.getElementById("s-err");
-    if (sq) sq.textContent = "⏳ Warteschlange: "   + q;
-    if (sw) sw.textContent = "⚙️ In Bearbeitung: "  + w;
-    if (sd) sd.textContent = "✅ Fertig: "           + d;
-    if (se) se.textContent = "❌ Fehler/Abbruch: "  + e;
+    html += '</div>';
+    
+    // Batch-Löschen Button für fehlerhafte/abgebrochene Jobs
+    const hasFailedOrCancelled = jobs.some(job => job.status === 'fehler' || job.status === 'abgebrochen');
+    if (hasFailedOrCancelled) {
+        html += '<div style="margin-top: 20px; text-align: right;">';
+        html += '<button class="batch-delete-btn" onclick="batchDeleteFailed()">🗑️ Alle fehlerhaften/abgebrochenen Jobs löschen</button>';
+        html += '</div>';
+    }
+    
+    container.innerHTML = html;
 }
 
-// ── Job abbrechen ─────────────────────────────────────────
-async function jobAbbrechen(jobId, btn) {
-    if (!confirm("Job wirklich abbrechen?")) return;
-    btn.disabled = true;
-    btn.textContent = "⏳";
+// Statistiken aktualisieren
+function updateStats(jobs) {
+    const stats = {
+        total: jobs.length,
+        waiting: jobs.filter(j => j.status === 'warteschlange').length,
+        active: jobs.filter(j => ['herunterladen', 'verarbeitung', 'transkription', 'zusammenfassung'].includes(j.status)).length,
+        completed: jobs.filter(j => j.status === 'abgeschlossen').length,
+        failed: jobs.filter(j => j.status === 'fehler').length,
+        cancelled: jobs.filter(j => j.status === 'abgebrochen').length
+    };
+    
+    let statsHtml = `
+        <div class="stats-grid">
+            <div class="stat-card">📊 Gesamt: ${stats.total}</div>
+            <div class="stat-card">⏳ Wartend: ${stats.waiting}</div>
+            <div class="stat-card">⚙️ Aktiv: ${stats.active}</div>
+            <div class="stat-card">✅ Fertig: ${stats.completed}</div>
+            <div class="stat-card">❌ Fehler: ${stats.failed}</div>
+            <div class="stat-card">⏹️ Abgebrochen: ${stats.cancelled}</div>
+        </div>
+    `;
+    
+    const statsContainer = document.getElementById('stats-container');
+    if (statsContainer) statsContainer.innerHTML = statsHtml;
+}
+
+// Job abbrechen
+async function cancelJob(jobId) {
+    if (!confirm('Möchtest du diesen Job wirklich abbrechen?')) return;
+    
     try {
-        const r = await fetch(`${API}/jobs/${jobId}/abbrechen`, {
-            method: "POST"
+        const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/abbrechen`, {
+            method: 'POST'
         });
-        if (!r.ok) {
-            const err = await r.json().catch(() => ({}));
-            alert("Fehler: " + (err.detail || r.status));
-            btn.disabled = false;
-            btn.textContent = "🛑";
-            return;
+        
+        if (response.ok) {
+            showMessage('Job wird abgebrochen...', 'success');
+            loadJobs(); // Reload nach kurzer Zeit
+        } else {
+            showError('Fehler beim Abbrechen des Jobs');
         }
-        await laden();
-    } catch(e) {
-        alert("Fehler: " + e.message);
-        btn.disabled = false;
-        btn.textContent = "🛑";
+    } catch (error) {
+        showError('Fehler beim Abbrechen des Jobs');
     }
 }
 
-// ── Job löschen ───────────────────────────────────────────
-async function jobLoeschen(jobId, btn) {
-    btn.disabled = true;
-    btn.textContent = "⏳";
+// Job löschen
+async function deleteJob(jobId) {
+    if (!confirm('Möchtest du diesen Job wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden!')) return;
+    
     try {
-        const r = await fetch(`${API}/jobs/${jobId}`, { method: "DELETE" });
-        if (!r.ok) throw new Error(await r.text());
-        await laden();
-    } catch(e) {
-        alert("Fehler beim Löschen: " + e.message);
-        btn.disabled = false;
-        btn.textContent = "🗑️";
-    }
-}
-
-// ── Alle abgebrochenen/fehlerhaften Jobs löschen ──────────
-async function alleAbgebrochenLoeschen() {
-    const anzahl = jobs.filter(j =>
-        LOESCHBAR.has(j.status) && j.status !== "abgeschlossen"
-    ).length;
-
-    if (anzahl === 0) { alert("Keine Jobs zum Löschen vorhanden."); return; }
-    if (!confirm(`${anzahl} Job(s) löschen?`)) return;
-
-    try {
-        const r = await fetch(`${API}/jobs/batch/abgebrochen`, {
-            method: "DELETE"
+        const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`, {
+            method: 'DELETE'
         });
-        if (!r.ok) throw new Error(await r.text());
-        const d = await r.json();
-        await laden();
-        console.log(`${d.geloescht} Jobs gelöscht`);
-    } catch(e) {
-        alert("Fehler: " + e.message);
+        
+        if (response.ok) {
+            showMessage('Job gelöscht', 'success');
+            loadJobs();
+        } else {
+            showError('Fehler beim Löschen des Jobs');
+        }
+    } catch (error) {
+        showError('Fehler beim Löschen des Jobs');
     }
 }
 
-// ── Job-Detail Modal ──────────────────────────────────────
-async function detail(id) {
-    aktiverJobId = id;
-    const modal  = document.getElementById("modal");
-    const inhalt = document.getElementById("modal-inhalt");
-    if (!modal || !inhalt) return;
-
-    modal.style.display = "flex";
-    inhalt.innerHTML =
-        "<p style='color:var(--ged);padding:2rem;text-align:center'>⏳ Lade...</p>";
-
+// Batch-Löschen aller fehlerhaften/abgebrochenen Jobs
+async function batchDeleteFailed() {
+    if (!confirm('Alle fehlerhaften und abgebrochenen Jobs löschen?')) return;
+    
     try {
-        const [jr, vr] = await Promise.allSettled([
-            fetch(`${API}/jobs/${id}`).then(r => r.json()),
-            fetch(`${API}/jobs/${id}/video`).then(r => r.ok ? r.json() : null),
-        ]);
-        const j = jr.status === "fulfilled" ? jr.value : null;
-        const v = vr.status === "fulfilled" ? vr.value : null;
-
-        if (!j) throw new Error("Job konnte nicht geladen werden");
-
-        const kapitelHtml = v?.kapitel?.length
-            ? `<ul class="kap-liste">${v.kapitel.map(k => `
-                <li>
-                    <span class="kap-ts">${esc(k.zeitstempel || "")}</span>
-                    <span>${esc(k.titel || "")}</span>
-                </li>`).join("")}</ul>`
-            : `<p style="color:var(--ged);padding:.5rem 0">
-                   Keine Kapitel erkannt.
-               </p>`;
-
-        inhalt.innerHTML = `
-            <h2 style="margin-bottom:.3rem;font-size:1.15rem;padding-right:2rem">
-                ${esc(v?.titel || kurz(j.url, 60))}
-            </h2>
-            <p style="color:var(--ged);font-size:.83rem;margin-bottom:1.5rem">
-                ${v ? esc(v.kanal) + " &nbsp;·&nbsp; " + dauer(v.dauer) : ""}
-                &nbsp;
-                <span class="badge b-${j.status}">
-                    ${ST[j.status] || j.status}
-                </span>
-                ${j.fehlermeldung ? `
-                <br><span style="color:var(--err);font-size:.8rem">
-                    ${esc(j.fehlermeldung)}
-                </span>` : ""}
-            </p>
-
-            <div class="mtabs">
-                <button class="mtab aktiv"
-                    onclick="mtab('zf',this)">📝 Zusammenfassung</button>
-                <button class="mtab"
-                    onclick="mtab('tr',this)">📄 Transkript</button>
-                <button class="mtab"
-                    onclick="mtab('ka',this)">📑 Kapitel</button>
-                <button class="mtab"
-                    onclick="mtab('chat',this)">💬 KI-Chat</button>
-            </div>
-
-            <div id="mt-zf">
-                <div class="inhalt">${esc(
-                    v?.zusammenfassung || "Zusammenfassung noch nicht verfügbar."
-                )}</div>
-            </div>
-            <div id="mt-tr" style="display:none">
-                <div class="inhalt">${esc(
-                    v?.transkript || "Transkript noch nicht verfügbar."
-                )}</div>
-            </div>
-            <div id="mt-ka" style="display:none">
-                ${kapitelHtml}
-            </div>
-            <div id="mt-chat" style="display:none">
-                <div class="chat-box" id="chat-verlauf"></div>
-                <div class="chat-eingabe">
-                    <input id="chat-frage" type="text"
-                           placeholder="Frage zum Video stellen..."
-                           onkeydown="if(event.key==='Enter')chatSenden()"/>
-                    <button onclick="chatSenden()">➤</button>
-                    <button class="exp-btn" onclick="chatLoeschen()"
-                            title="Chat leeren">🗑</button>
-                </div>
-            </div>
-
-            <div class="export-zeile">
-                <button class="exp-btn" onclick="exp('${id}','txt')">
-                    ⬇ TXT
-                </button>
-                <button class="exp-btn" onclick="exp('${id}','markdown')">
-                    ⬇ Markdown
-                </button>
-                <button class="exp-btn" onclick="exp('${id}','json')">
-                    ⬇ JSON
-                </button>
-                ${v?.podcast_pfad ? `
-                <button class="exp-btn" onclick="exp('${id}','podcast')">
-                    🎙 Podcast
-                </button>` : ""}
-                <button class="exp-btn"
-                        style="margin-left:auto;color:var(--err);border-color:var(--err)"
-                        onclick="modalZu();jobLoeschen('${id}',this)">
-                    🗑️ Löschen
-                </button>
-            </div>`;
-
-    } catch(e) {
-        inhalt.innerHTML =
-            `<p style="color:var(--err);padding:1rem">
-                ❌ Fehler: ${esc(e.message)}
-             </p>`;
+        const response = await fetch(`${API_BASE_URL}/jobs/batch/abgebrochen`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showMessage('Fehlerhafte Jobs gelöscht', 'success');
+            loadJobs();
+        } else {
+            showError('Fehler beim Löschen');
+        }
+    } catch (error) {
+        showError('Fehler beim Löschen');
     }
 }
 
-// ── Modal-Tabs ────────────────────────────────────────────
-function mtab(n, btn) {
-    ["zf", "tr", "ka", "chat"].forEach(t => {
-        const el = document.getElementById("mt-" + t);
-        if (el) el.style.display = t === n ? "" : "none";
+// KI-Chat öffnen
+function openChat(jobId) {
+    currentJobId = jobId;
+    document.getElementById('chat-modal').style.display = 'block';
+    document.getElementById('chat-job-id').textContent = `Job: ${jobId.substring(0,8)}...`;
+    loadChatHistory(jobId);
+}
+
+// Chat schließen
+function closeChat() {
+    document.getElementById('chat-modal').style.display = 'none';
+    document.getElementById('chat-messages').innerHTML = '';
+    document.getElementById('chat-input').value = '';
+}
+
+// Chat-Nachricht senden
+async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    
+    if (!message || !currentJobId) return;
+    
+    // Nachricht im Chat anzeigen
+    addChatMessage('user', message);
+    input.value = '';
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/chat/${currentJobId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nachricht: message })
+        });
+        
+        const data = await response.json();
+        addChatMessage('assistant', data.antwort || 'Keine Antwort erhalten');
+    } catch (error) {
+        addChatMessage('assistant', 'Fehler bei der KI-Antwort');
+    }
+}
+
+// Chat-Verlauf laden
+async function loadChatHistory(jobId) {
+    try {
+        // Hier müsste ein Endpunkt für Chat-Verlauf existieren
+        // Für jetzt fügen wir nur eine Begrüßung hinzu
+        addChatMessage('assistant', '👋 Hallo! Ich bin der KI-Assistent für dieses Video. Was möchtest du wissen?');
+    } catch (error) {
+        console.error('Fehler beim Laden des Chat-Verlaufs');
+    }
+}
+
+// Chat-Verlauf löschen
+async function clearChatHistory() {
+    if (!confirm('Chat-Verlauf löschen?')) return;
+    
+    try {
+        await fetch(`${API_BASE_URL}/chat/${currentJobId}/verlauf`, {
+            method: 'DELETE'
+        });
+        document.getElementById('chat-messages').innerHTML = '';
+        addChatMessage('assistant', '👋 Chat-Verlauf gelöscht. Stelle mir eine neue Frage!');
+    } catch (error) {
+        showError('Fehler beim Löschen des Chat-Verlaufs');
+    }
+}
+
+// Nachricht zum Chat hinzufügen
+function addChatMessage(role, content) {
+    const messagesDiv = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${role}-message`;
+    messageDiv.textContent = content;
+    messagesDiv.appendChild(messageDiv);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// Details anzeigen (einfache Version)
+function viewDetails(jobId) {
+    window.open(`${API_BASE_URL}/export/${jobId}/json`, '_blank');
+}
+
+// Neuen Job erstellen
+document.getElementById('job-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const url = document.getElementById('video-url').value;
+    const options = {
+        whisper_modell: document.getElementById('whisper-model').value,
+        zusammenfassung_erstellen: document.getElementById('summary-check').checked,
+        kapitel_erkennen: document.getElementById('chapters-check').checked,
+        podcast_erstellen: document.getElementById('podcast-check')?.checked || false,
+        zusammenfassung_stil: document.getElementById('summary-style').value
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/jobs/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, optionen: options })
+        });
+        
+        if (response.ok) {
+            document.getElementById('video-url').value = '';
+            showMessage('Job erfolgreich erstellt!', 'success');
+            loadJobs();
+        } else {
+            const error = await response.text();
+            showError('Fehler beim Erstellen: ' + error);
+        }
+    } catch (error) {
+        showError('Fehler beim Erstellen des Jobs');
+    }
+});
+
+// Hilfsfunktionen
+function showError(message) {
+    const errorDiv = document.getElementById('error-message');
+    errorDiv.textContent = message;
+    errorDiv.style.display = 'block';
+    setTimeout(() => { errorDiv.style.display = 'none'; }, 5000);
+}
+
+function showMessage(message, type) {
+    const messageDiv = document.getElementById('success-message');
+    messageDiv.textContent = message;
+    messageDiv.style.display = 'block';
+    messageDiv.className = `message ${type}-message`;
+    setTimeout(() => { messageDiv.style.display = 'none'; }, 3000);
+}
+
+// Initialisierung
+document.addEventListener('DOMContentLoaded', () => {
+    checkApiStatus();
+    loadJobs();
+    setInterval(loadJobs, 5000); // Auto-Refresh alle 5 Sekunden
+    
+    // Enter-Taste im Chat
+    document.getElementById('chat-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendChatMessage();
+        }
     });
-    document.querySelectorAll(".mtab")
-        .forEach(b => b.classList.remove("aktiv"));
-    btn.classList.add("aktiv");
-    if (n === "chat") {
-        setTimeout(() =>
-            document.getElementById("chat-frage")?.focus(), 100);
-    }
-}
-
-function modalZu() {
-    const modal = document.getElementById("modal");
-    if (modal) modal.style.display = "none";
-}
-
-// ── Export ────────────────────────────────────────────────
-function exp(id, fmt) {
-    window.open(`${API}/export/${id}/${fmt}`, "_blank");
-}
-
-// ── KI-Chat ───────────────────────────────────────────────
-async function chatSenden() {
-    const eingabe = document.getElementById("chat-frage");
-    const frage   = eingabe?.value.trim();
-    if (!frage || !aktiverJobId) return;
-    eingabe.value = "";
-
-    chatMsg("nutzer", frage);
-    const ladeId = "laden-" + Date.now();
-    chatMsg("assistent", "⏳ Denke nach...", ladeId);
-
-    try {
-        const r = await fetch(`${API}/chat/${aktiverJobId}`, {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ frage })
-        });
-        document.getElementById(ladeId)?.remove();
-        if (!r.ok) throw new Error(await r.text());
-        const d = await r.json();
-        chatMsg("assistent", d.antwort);
-    } catch(e) {
-        document.getElementById(ladeId)?.remove();
-        chatMsg("fehler", "❌ " + e.message);
-    }
-}
-
-function chatMsg(rolle, text, id) {
-    const box = document.getElementById("chat-verlauf");
-    if (!box) return;
-    const div = document.createElement("div");
-    div.className = `chat-msg chat-${rolle}`;
-    if (id) div.id = id;
-    div.textContent = text;
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
-}
-
-async function chatLoeschen() {
-    if (!aktiverJobId) return;
-    await fetch(`${API}/chat/${aktiverJobId}/verlauf`,
-        { method: "DELETE" }).catch(() => {});
-    const box = document.getElementById("chat-verlauf");
-    if (box) box.innerHTML = "";
-}
-
-// ── Suche ─────────────────────────────────────────────────
-async function suchen() {
-    const qEl = document.getElementById("sq");
-    const c   = document.getElementById("such-ergebnisse");
-    if (!qEl || !c) return;
-
-    const q = qEl.value.trim();
-    if (!q) return;
-
-    c.innerHTML = "<p style='color:var(--ged)'>⏳ Suche läuft...</p>";
-
-    try {
-        const r = await fetch(API + "/suche/", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ suchwort: q, limit: 20 })
-        });
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        const res = await r.json();
-
-        if (!res.length) {
-            c.innerHTML =
-                `<p style="color:var(--ged)">
-                     Keine Treffer für „${esc(q)}" gefunden.
-                 </p>`;
-            return;
-        }
-
-        c.innerHTML = res.map(e => `
-            <div class="s-result" onclick="detail('${e.job_id}')">
-                <h4>${esc(e.titel)}</h4>
-                <div class="s-snip">"...${esc(e.ausschnitt)}..."</div>
-                <div class="s-meta">
-                    Gefunden in: ${esc(e.gefunden_in)}
-                    &nbsp;·&nbsp; ${esc(e.kanal)}
-                </div>
-            </div>`).join("");
-    } catch(e) {
-        c.innerHTML =
-            `<p style="color:var(--err)">❌ Suchfehler: ${esc(e.message)}</p>`;
-    }
-}
-
-// ── Hilfsfunktionen ───────────────────────────────────────
-function kurz(s, n) {
-    if (!s) return "";
-    return s.length > n ? s.slice(0, n) + "…" : s;
-}
-
-function esc(s) {
-    if (s === null || s === undefined) return "";
-    return String(s)
-        .replace(/&/g,  "&amp;")
-        .replace(/</g,  "&lt;")
-        .replace(/>/g,  "&gt;")
-        .replace(/"/g,  "&quot;")
-        .replace(/'/g,  "&#39;");
-}
-
-function zeit(iso) {
-    if (!iso) return "";
-    const d = (Date.now() - new Date(iso)) / 1000;
-    if (d < 60)    return "gerade eben";
-    if (d < 3600)  return Math.floor(d / 60) + " Min";
-    if (d < 86400) return Math.floor(d / 3600) + " Std";
-    return Math.floor(d / 86400) + " Tagen";
-}
-
-function dauer(s) {
-    if (!s) return "";
-    const h   = Math.floor(s / 3600);
-    const m   = Math.floor((s % 3600) / 60);
-    const sek = s % 60;
-    return h > 0 ? `${h}h ${m}m` : `${m}m ${sek}s`;
-}
-
-// ── Event Listener + Initialisierung ─────────────────────
-function init() {
-    const sq  = document.getElementById("sq");
-    const url = document.getElementById("url");
-    const mod = document.getElementById("modal");
-
-    if (sq) {
-        sq.addEventListener("keydown", e => {
-            if (e.key === "Enter") suchen();
-        });
-    }
-    if (url) {
-        url.addEventListener("keydown", e => {
-            if (e.key === "Enter") starten();
-        });
-    }
-    if (mod) {
-        mod.addEventListener("click", function(e) {
-            if (e.target === this) modalZu();
-        });
-    }
-
-    console.log("✅ YouTube AI Suite – API:", API);
-    laden();
-    setInterval(laden, 5000);
-}
-
-// DOM abwarten
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-} else {
-    init();
-}
+});

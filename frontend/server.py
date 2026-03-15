@@ -1,26 +1,32 @@
 #!/usr/bin/env python3
 """
-Einfacher HTTP-Server ohne Cache für das Frontend.
+Einfacher HTTP-Server für das Frontend
 """
-import http.server
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 import os
+import sys
 
-class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
-
+class CORSRequestHandler(SimpleHTTPRequestHandler):
     def end_headers(self):
-        # Cache komplett deaktivieren
-        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
-        super().end_headers()
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
+        SimpleHTTPRequestHandler.end_headers(self)
+    
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
 
-    def log_message(self, format, *args):
-        # Schöneres Logging
-        print(f"{self.address_string()} - {args[0]} {args[1]}")
-
-
-if __name__ == "__main__":
-    os.chdir("/app")
-    server = http.server.HTTPServer(("0.0.0.0", 80), NoCacheHandler)
-    print("Frontend läuft auf Port 80")
-    server.serve_forever()
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 3000))
+    server = HTTPServer(('0.0.0.0', port), CORSRequestHandler)
+    print(f"Frontend Server läuft auf http://0.0.0.0:{port}")
+    print(f"API wird erwartet unter: http://192.168.178.40:8000")
+    sys.stdout.flush()  # Wichtig für Docker-Logs
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nServer wird beendet...")
+        server.shutdown()

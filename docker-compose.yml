@@ -1,106 +1,169 @@
 services:
   postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-yt_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yt_geheim}
-      POSTGRES_DB: ${POSTGRES_DB:-yt_ai_suite}
-    volumes:
-      - postgres_daten:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yt_user} -d ${POSTGRES_DB:-yt_ai_suite}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    image: postgres:16
+    container_name: postgres
     restart: unless-stopped
+    environment:
+      POSTGRES_USER: yt_user
+      POSTGRES_PASSWORD: sicheres_passwort
+      POSTGRES_DB: yt_ai_suite
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yt_user -d yt_ai_suite"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - youtube_network
 
   redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
+    image: redis:7
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
     volumes:
-      - redis_daten:/data
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
-
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-yt_user}:${POSTGRES_PASSWORD:-yt_geheim}@postgres:5432/${POSTGRES_DB:-yt_ai_suite}
-      - REDIS_URL=redis://redis:6379
-      - SECRET_KEY=${SECRET_KEY:-sichererschluessel}
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-    volumes:
-      - ./data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
-  worker:
-    build:
-      context: ./worker
-      dockerfile: Dockerfile
-    environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-yt_user}:${POSTGRES_PASSWORD:-yt_geheim}@postgres:5432/${POSTGRES_DB:-yt_ai_suite}
-      - REDIS_URL=redis://redis:6379
-      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - WHISPER_MODELL=${WHISPER_MODELL:-base}
-      - WHISPER_GERAET=${WHISPER_GERAET:-cpu}
-      - WHISPER_BERECHNUNG=${WHISPER_BERECHNUNG:-int8}
-    volumes:
-      - ./data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    deploy:
-      replicas: 2
-    restart: unless-stopped
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:80"
-    environment:
-      - API_URL=http://192.168.178.40:8000
-    depends_on:
-      - api
-    restart: unless-stopped
+    networks:
+      - youtube_network
 
   ollama:
     image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
     ports:
       - "11434:11434"
-    environment:
-      - HF_TOKEN=${HF_TOKEN}
     volumes:
-      - ollama_daten:/root/.ollama
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - youtube_network
+
+  api:
+    build: ./api
+    container_name: api
     restart: unless-stopped
-    # GPU (optional, falls verfügbar):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://yt_user:sicheres_passwort@postgres:5432/yt_ai_suite
+      - REDIS_URL=redis://redis:6379
+      - OLLAMA_URL=http://ollama:11434
+      - SECRET_KEY=geheimer_schluessel_123
+    volumes:
+      - ./api:/app
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # WICHTIG: Zusätzliche Wartezeit
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/gesundheit"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - youtube_network
+
+  worker:
+    build: ./worker
+    container_name: worker
+    restart: unless-stopped
+    ports:
+      - "8081:8081"  # Health-Checks (optional)
+    environment:
+      - DATABASE_URL=postgresql://yt_user:sicheres_passwort@postgres:5432/yt_ai_suite
+      - REDIS_URL=redis://redis:6379
+      - OLLAMA_URL=http://ollama:11434
+      - WORKER_ID=worker-1
+      - ENABLE_HEALTH_CHECKS=false
+      - WHISPER_MODELL=tiny
+      - WHISPER_GERAET=cpu
+      - WHISPER_BERECHNUNG=int8
+      - OLLAMA_MODELL=llama3.2:1b
+      - DOWNLOAD_MAX_RETRIES=3
+      - OLLAMA_TIMEOUT=30
+    volumes:
+      - ./worker:/app
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    networks:
+      - youtube_network
+    # WICHTIG: Kein deploy.replicas - nur EIN Worker!
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://192.168.178.40:8000
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - api
+    networks:
+      - youtube_network
+
+  # Optional: Monitoring (nur wenn gewünscht)
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   networks:
+  #     - youtube_network
+  #   depends_on:
+  #     - api
+  #     - worker
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: grafana
+  #   ports:
+  #     - "3001:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   volumes:
+  #     - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+  #     - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+  #     - grafana_data:/var/lib/grafana
+  #   networks:
+  #     - youtube_network
+  #   depends_on:
+  #     - prometheus
 
 volumes:
-  postgres_daten:
-  redis_daten:
-  ollama_daten:    # ← NEU
+  postgres_data:
+  redis_data:
+  ollama_data:
+  # prometheus_data:    # Auskommentiert wenn Monitoring aktiv
+  # grafana_data:       # Auskommentiert wenn Monitoring aktiv
+
+networks:
+  youtube_network:
+    driver: bridge

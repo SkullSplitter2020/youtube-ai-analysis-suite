@@ -1,18 +1,18 @@
-FROM python:3.11-alpine
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-COPY index.html .
-COPY style.css  .
-COPY app.js     .
-
-RUN adduser -D webuser && \
-    chown -R webuser:webuser /app && \
-    chmod -R 755 /app
-
-# Kleiner Python-Server mit Cache-Deaktivierung
+# Kopiere die Dateien
 COPY server.py .
+COPY index.html .
+COPY style.css .
+COPY app.js .
 
-USER webuser
-EXPOSE 80
-CMD ["python3", "server.py"]
+# Prüfe ob Dateien vorhanden sind
+RUN ls -la
+
+# Port freigeben
+EXPOSE 3000
+
+# Startbefehl
+CMD ["python", "-u", "server.py"]

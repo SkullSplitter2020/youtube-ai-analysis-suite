@@ -1,54 +1,55 @@
-from fastapi import FastAPI, Request
+#!/usr/bin/env python3
+"""
+YouTube AI Analysis Suite - API
+Haupt-API mit Wartefunktion für Datenbank
+"""
+
+import asyncio
+import logging
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from contextlib import asynccontextmanager
+import uvicorn
+import os
+
+# Warte auf Datenbank - korrekter Import
+from wait_for_db import wait_for_database
+
+# Routen importieren
+from routers import jobs, search, export, chat
 from database import init_db
-from routers import jobs, search, export
-import traceback
 
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("api")
 
-@asynccontextmanager
-async def lebenszyklus(app: FastAPI):
-    await init_db()
-    yield
+app = FastAPI(title="YouTube AI Analysis Suite API")
 
-
-app = FastAPI(
-    title="YouTube AI Analysis Suite",
-    version="1.0.0",
-    lifespan=lebenszyklus
-)
-
-# CORS zuerst registrieren – vor allem anderen!
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"],
 )
 
+# Router einbinden
+app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
+app.include_router(search.router, prefix="/api/suche", tags=["search"])
+app.include_router(export.router, prefix="/api/export", tags=["export"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 
-# CORS auch bei 500-Fehlern sicherstellen
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc)},
-        headers={
-            "Access-Control-Allow-Origin":  "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
-
-
-app.include_router(jobs.router,   prefix="/api/jobs",   tags=["Jobs"])
-app.include_router(search.router, prefix="/api/suche",  tags=["Suche"])
-app.include_router(export.router, prefix="/api/export", tags=["Export"])
-
+@app.on_event("startup")
+async def startup_event():
+    """Wird beim Start ausgeführt"""
+    log.info("⏳ Warte auf Datenbank...")
+    await wait_for_database()
+    log.info("✅ Datenbank verbunden, initialisiere...")
+    await init_db()
+    log.info("🚀 API gestartet")
 
 @app.get("/api/gesundheit")
-async def gesundheitscheck():
+async def gesundheit():
     return {"status": "ok", "dienst": "YouTube AI Analysis Suite"}
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -7,93 +7,89 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header>
-    <div class="logo">🎬 YouTube KI Suite</div>
-    <nav>
-        <button class="nav-btn aktiv" id="nav-dashboard" onclick="tab('dashboard')">📊 Dashboard</button>
-        <button class="nav-btn" id="nav-suche" onclick="tab('suche')">🔍 Suche</button>
-    </nav>
-    <div class="ws-anzeige">
-        <span id="ws-status" class="ws-dot"></span>
-        <span class="ws-text">Live</span>
-    </div>
-</header>
-<main>
-    <div id="tab-dashboard">
-        <section class="karte">
-            <h2>➕ Neuen Analyse-Job starten</h2>
-            <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." class="url-feld"/>
-            <div class="einstellungen">
-                <div class="gruppe">
-                    <label>Whisper-Modell</label>
-                    <select id="modell">
-                        <option value="tiny">Tiny – schnell</option>
-                        <option value="base" selected>Base – empfohlen</option>
-                        <option value="small">Small – genauer</option>
-                        <option value="medium">Medium – sehr genau</option>
-                        <option value="large">Large – maximal</option>
-                    </select>
-                </div>
-                <div class="gruppe">
-                    <label>Zusammenfassungs-Stil</label>
-                    <select id="stil">
-                        <option value="stichpunkte">Stichpunkte</option>
-                        <option value="ausfuehrlich">Ausführlich</option>
-                        <option value="kernaussagen">Kernaussagen</option>
-                        <option value="podcast_skript">Podcast-Skript</option>
-                    </select>
-                </div>
-                <div class="gruppe">
-                    <label>Optionen</label>
-                    <div class="schalter">
-                        <label><input type="checkbox" id="kap" checked> Kapitel</label>
-                        <label><input type="checkbox" id="zf" checked> Zusammenfassung</label>
-                        <label><input type="checkbox" id="pod"> Podcast MP3</label>
+    <div class="container">
+        <header>
+            <h1>🎬 YouTube AI Analysis Suite</h1>
+            <p>Automatische Video-Analyse mit KI</p>
+            <div class="status-badge" id="api-status">API Status: Prüfe...</div>
+        </header>
+        
+        <div id="error-message" class="message error-message"></div>
+        <div id="success-message" class="message success-message"></div>
+        
+        <main>
+            <div class="card">
+                <h2>Neuen Job erstellen</h2>
+                <form id="job-form">
+                    <div class="form-group">
+                        <label for="video-url">YouTube URL:</label>
+                        <input type="text" id="video-url" placeholder="https://www.youtube.com/watch?v=..." required>
                     </div>
+                    
+                    <div class="form-group">
+                        <label for="whisper-model">Whisper Modell:</label>
+                        <select id="whisper-model">
+                            <option value="tiny" selected>tiny (schnell)</option>
+                            <option value="base">base (ausgewogen)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <label>
+                            <input type="checkbox" id="summary-check" checked> Zusammenfassung
+                        </label>
+                        <label>
+                            <input type="checkbox" id="chapters-check" checked> Kapitel
+                        </label>
+                        <label>
+                            <input type="checkbox" id="podcast-check"> Podcast
+                        </label>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="summary-style">Zusammenfassungs-Stil:</label>
+                        <select id="summary-style">
+                            <option value="stichpunkte">Stichpunkte</option>
+                            <option value="ausführlich">Ausführlich</option>
+                            <option value="kernaussagen">Kernaussagen</option>
+                            <option value="podcast">Podcast-Skript</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit">Job erstellen</button>
+                </form>
+            </div>
+            
+            <div class="card">
+                <h2>Statistiken</h2>
+                <div id="stats-container"></div>
+            </div>
+            
+            <div class="card">
+                <h2>Jobs Übersicht</h2>
+                <div id="jobs-container">Lade Jobs...</div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Chat Modal -->
+    <div id="chat-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>💬 KI-Chat <span id="chat-job-id"></span></h3>
+                <div>
+                    <button class="modal-btn" onclick="clearChatHistory()">🗑️ Verlauf löschen</button>
+                    <button class="modal-btn close" onclick="closeChat()">✖️ Schließen</button>
                 </div>
             </div>
-            <button id="start-btn" onclick="starten()">🚀 Analyse starten</button>
-        </section>
-        <div class="stats-leiste">
-            <div class="stat" id="s-queue">⏳ Warteschlange: –</div>
-            <div class="stat" id="s-work">⚙️ In Bearbeitung: –</div>
-            <div class="stat" id="s-done">✅ Fertig: –</div>
-            <div class="stat" id="s-err">❌ Fehler: –</div>
-        </div>
-        <div style="display:flex;justify-content:flex-end;margin-bottom:1rem;gap:.5rem">
-            <button class="exp-btn" onclick="alleAbgebrochenLoeschen()" style="font-size:.8rem">🗑️ Abgebrochene löschen</button>
-            <button class="exp-btn" onclick="laden()" style="font-size:.8rem">🔄 Aktualisieren</button>
-        </div>
-        <h2 style="margin-bottom:1rem">📋 Job-Übersicht</h2>
-        <div id="jobs"></div>
-    </div>
-    <div id="tab-suche" style="display:none">
-        <section class="karte">
-            <h2>🔍 Transkripte durchsuchen</h2>
-            <div class="suche-zeile">
-                <input id="sq" type="text" placeholder="Suchbegriff eingeben..."/>
-                <button onclick="suchen()">Suchen</button>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Frage zum Video stellen...">
+                <button onclick="sendChatMessage()">📤 Senden</button>
             </div>
-            <div id="such-ergebnisse"></div>
-        </section>
+        </div>
     </div>
-<div class="mtabs">
-    <button class="mtab aktiv" onclick="mtab('zf',this)">📝 Zusammenfassung</button>
-    <button class="mtab" onclick="mtab('tr',this)">📄 Transkript</button>
-    <button class="mtab" onclick="mtab('ka',this)">📑 Kapitel</button>
-    <button class="mtab" onclick="mtab('chat',this)">💬 KI-Chat</button>
-</div>
-
-<div id="mt-chat" style="display:none">
-    <div class="chat-box" id="chat-verlauf"></div>
-    <div class="chat-eingabe">
-        <input id="chat-frage" type="text"
-               placeholder="Frage zum Video stellen..."
-               onkeydown="if(event.key==='Enter') chatSenden()"/>
-        <button onclick="chatSenden()">➤</button>
-        <button class="exp-btn" onclick="chatLoeschen()">🗑</button>
-    </div>
-</div></main>
-<script src="app.js"></script>
+    
+    <script src="app.js"></script>
 </body>
 </html>

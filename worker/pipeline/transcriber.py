@@ -6,12 +6,13 @@ Transkription mit Faster-Whisper
 
 import os
 import logging
+import asyncio
 from faster_whisper import WhisperModel
 
 log = logging.getLogger("transcriber")
 
 class WhisperTranscriber:
-    def __init__(self, model_size="base", device="cpu", compute_type="int8"):
+    def __init__(self, model_size="tiny", device="cpu", compute_type="int8"):
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
